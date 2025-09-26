@@ -1,6 +1,6 @@
 # Components Overview
 
-## Contents
+
 ```
 components/
 ├── README.md
