@@ -1,0 +1,15 @@
+README.md
+pyproject.toml
+igsimplex/__init__.py
+igsimplex/__main__.py
+igsimplex/cli.py
+igsimplex/core.py
+igsimplex/opt.py
+igsimplex.egg-info/PKG-INFO
+igsimplex.egg-info/SOURCES.txt
+igsimplex.egg-info/dependency_links.txt
+igsimplex.egg-info/requires.txt
+igsimplex.egg-info/top_level.txt
+tests/test_kl_step.py
+tests/test_metrics.py
+tests/test_projection.py

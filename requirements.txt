@@ -3,3 +3,5 @@ pandas
 matplotlib
 xlsxwriter
 nbformat
+pytest>=7.0
+
