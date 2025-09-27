@@ -1,6 +1,9 @@
 import numpy as np
 
+# ---------- Basics ----------
+
 def normalize(p: np.ndarray) -> np.ndarray:
+    p = np.asarray(p, dtype=float)
     p = np.clip(p, 0.0, None)
     s = p.sum()
     if s <= 0:
@@ -21,8 +24,8 @@ def kl(p_new: np.ndarray, p_old: np.ndarray) -> float:
     p_new = normalize(p_new)
     p_old = normalize(p_old)
     with np.errstate(divide="ignore", invalid="ignore"):
-        ratio = np.where(p_new > 0, p_new / np.maximum(p_old, 1e-300), 1.0)
-        term = np.where(p_new > 0, p_new * np.log(ratio), 0.0)
+        ratio = np.where(p_new > 0.0, p_new / np.maximum(p_old, 1e-300), 1.0)
+        term = np.where(p_new > 0.0, p_new * np.log(ratio), 0.0)
     return float(np.sum(term))
 
 def mc_estimates(p: np.ndarray, r: np.ndarray, n: int, seed: int = 123):
@@ -32,52 +35,180 @@ def mc_estimates(p: np.ndarray, r: np.ndarray, n: int, seed: int = 123):
     pay = r[idx]
     rtp = float(pay.mean())
     hit = float((pay > 0.0).mean())
-    var = float(pay.var(ddof=0) - 0.0)  # bet=1
+    var = float(pay.var(ddof=0))  # bet=1
     return rtp, hit, var
 
-def affine_exponentiated_projection(p: np.ndarray, r: np.ndarray,
-                                    rtp_band: tuple[float, float],
-                                    hit_band: tuple[float, float],
-                                    max_iter: int = 50, tol: float = 5e-7):
+# ---------- KL projection helpers ----------
+
+def _tilt(p: np.ndarray, a: np.ndarray) -> np.ndarray:
     """
-    KL (Bregman) projection of p onto linear bands of RTP and Hit.
-    Uses multiplicative weights with two dual parameters (lambda, mu):
-      p' ∝ p * exp(lambda * r + mu * I[r>0])
-    and coordinate updates on (lambda, mu) until both constraints fall into bands.
+    Exponential tilt: p' ∝ p * exp(a)
+    Numerically stable via max-subtraction.
     """
-    p0 = normalize(p)
+    p = normalize(p)
+    a = np.asarray(a, dtype=float)
+    x = a - np.max(a)
+    w = p * np.exp(x)
+    s = w.sum()
+    if not np.isfinite(s) or s <= 0:
+        return p.copy()
+    return w / s
+
+def _rtp(p: np.ndarray, r: np.ndarray) -> float:
+    return float(np.dot(normalize(p), np.asarray(r, dtype=float)))
+
+def _hit(p: np.ndarray, mask01: np.ndarray) -> float:
+    return float(np.dot(normalize(p), np.asarray(mask01, dtype=float)))
+
+def _project_rtp_kl(p: np.ndarray,
+                    r: np.ndarray,
+                    target: float,
+                    side: str,
+                    tol: float = 1e-9,
+                    max_iter: int = 80) -> np.ndarray:
+    """
+    Minimize KL(p'||p) s.t. E_{p'}[r] = target (hit equality analog below).
+    When side='upper', enforce E[r] <= target by landing on boundary.
+    When side='lower', enforce E[r] >= target by landing on boundary.
+    Achieved by p'(i) ∝ p(i) * exp(-λ r_i) with bisection on λ.
+    """
+    p = normalize(p)
     r = np.asarray(r, dtype=float)
-    mask_hit = (r > 0.0).astype(float)
+    cur = _rtp(p, r)
 
-    lam, mu = 0.0, 0.0
+    if side == "upper":
+        if cur <= target + tol:
+            return p
+        lo, hi = 0.0, 1.0
+        # Expand hi until E_r <= target
+        while _rtp(_tilt(p, -hi * r), r) > target and hi < 1e6:
+            hi *= 2.0
+        for _ in range(max_iter):
+            mid = 0.5 * (lo + hi)
+            pm = _tilt(p, -mid * r)
+            val = _rtp(pm, r)
+            if val <= target:
+                hi = mid
+            else:
+                lo = mid
+        return _tilt(p, -hi * r)
+
+    else:  # side == "lower"
+        if cur >= target - tol:
+            return p
+        lo, hi = 0.0, 1.0
+        # Need to increase E[r] -> λ negative; search on -hi
+        while _rtp(_tilt(p, +hi * r), r) < target and hi < 1e6:
+            hi *= 2.0
+        for _ in range(max_iter):
+            mid = 0.5 * (lo + hi)
+            pm = _tilt(p, +mid * r)
+            val = _rtp(pm, r)
+            if val >= target:
+                hi = mid
+            else:
+                lo = mid
+        return _tilt(p, +hi * r)
+
+def _project_hit_kl(p: np.ndarray,
+                    mask01: np.ndarray,
+                    target: float,
+                    side: str,
+                    tol: float = 1e-9,
+                    max_iter: int = 80) -> np.ndarray:
+    """
+    Minimize KL(p'||p) s.t. E_{p'}[h] = target for h∈{0,1}^n (hit-rate).
+    Achieved by p'(i) ∝ p(i) * exp(μ h_i), bisection on μ.
+    side='upper' enforces E[h] <= target; 'lower' enforces E[h] >= target.
+    """
+    p = normalize(p)
+    h = np.asarray(mask01, dtype=float)
+    cur = _hit(p, h)
+
+    if side == "upper":
+        if cur <= target + tol:
+            return p
+        lo, hi = 0.0, 1.0
+        while _hit(_tilt(p, +hi * h), h) > target and hi < 1e6:
+            hi *= 2.0
+        for _ in range(max_iter):
+            mid = 0.5 * (lo + hi)
+            pm = _tilt(p, +mid * h)
+            val = _hit(pm, h)
+            if val <= target:
+                hi = mid
+            else:
+                lo = mid
+        return _tilt(p, +hi * h)
+
+    else:  # side == "lower"
+        if cur >= target - tol:
+            return p
+        lo, hi = 0.0, 1.0
+        while _hit(_tilt(p, -hi * h), h) < target and hi < 1e6:
+            hi *= 2.0
+        for _ in range(max_iter):
+            mid = 0.5 * (lo + hi)
+            pm = _tilt(p, -mid * h)
+            val = _hit(pm, h)
+            if val >= target:
+                hi = mid
+            else:
+                lo = mid
+        return _tilt(p, -hi * h)
+
+# ---------- Public API ----------
+
+def affine_exponentiated_projection(
+    p: np.ndarray,
+    r: np.ndarray,
+    rtp_band: tuple[float, float] | None,
+    hit_band: tuple[float, float] | None,
+    max_iter: int = 50,
+    tol: float = 1e-8
+) -> np.ndarray:
+    """
+    KL (Bregman) projection of p onto bands of RTP and Hit via alternating
+    1D KL-minimal projections (exponential tilts). Stable and band-exact.
+
+    Steps:
+      1) If RTP is out of band, project to nearest boundary (I-projection).
+      2) Recompute; if Hit is out of band, project similarly.
+      3) Alternate up to max_iter or until both in-band (with tol).
+    """
+    p = normalize(p)
+    r = np.asarray(r, dtype=float)
+    h = (r > 0.0).astype(float)
+
+    # Alternating projections
     for _ in range(max_iter):
-        logits = np.log(np.maximum(p0, 1e-300)) + lam * r + mu * mask_hit
-        p_new = np.exp(logits - logits.max())
-        p_new = p_new / p_new.sum()
+        rtp, hit, _ = kpis(p, r)
 
-        rtp, hit, _ = kpis(p_new, r)
+        # RTP band
+        if rtp_band is not None:
+            low_rtp, high_rtp = rtp_band
+            if rtp > high_rtp + tol:
+                p = _project_rtp_kl(p, r, high_rtp, side="upper", tol=tol)
+            elif rtp < low_rtp - tol:
+                p = _project_rtp_kl(p, r, low_rtp, side="lower", tol=tol)
 
-        # Adjust lam for RTP
-        if rtp < rtp_band[0]:
-            lam += 0.5
-        elif rtp > rtp_band[1]:
-            lam -= 0.5
-        else:
-            # small nudges to center
-            lam += 0.1 * (0.5 * (rtp_band[0] + rtp_band[1]) - rtp)
+        # Recompute after RTP projection
+        rtp, hit, _ = kpis(p, r)
 
-        # Adjust mu for Hit
-        if hit < hit_band[0]:
-            mu += 0.5
-        elif hit > hit_band[1]:
-            mu -= 0.5
-        else:
-            mu += 0.1 * (0.5 * (hit_band[0] + hit_band[1]) - hit)
+        # Hit band
+        if hit_band is not None:
+            low_hit, high_hit = hit_band
+            if hit > high_hit + tol:
+                p = _project_hit_kl(p, h, high_hit, side="upper", tol=tol)
+            elif hit < low_hit - tol:
+                p = _project_hit_kl(p, h, low_hit, side="lower", tol=tol)
 
-        # Check convergence (both in-band and stable)
-        if (rtp_band[0] <= rtp <= rtp_band[1]) and (hit_band[0] <= hit <= hit_band[1]):
-            # ensure small KL movement from previous projection step
-            if kl(p_new, p0) < tol:
-                return p_new
-            # else keep refining a bit more with smaller nudges
-    return p_new  # best-effort
+        # Check termination: both in bands
+        rtp, hit, _ = kpis(p, r)
+        ok_rtp = (rtp_band is None) or (rtp >= rtp_band[0] - tol and rtp <= rtp_band[1] + tol)
+        ok_hit = (hit_band is None) or (hit >= hit_band[0] - tol and hit <= hit_band[1] + tol)
+        if ok_rtp and ok_hit:
+            return normalize(p)
+
+    # Best effort if not converged within max_iter
+    return normalize(p)
