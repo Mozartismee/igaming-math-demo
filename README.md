@@ -1,74 +1,111 @@
-# toy-slot-on-the-simplex: KL-bounded tuning under RTP/Hit guardrails
+# toy-slot-on-the-simplex — KL-bounded tuning under RTP/Hit guardrails
 
-**Tagline.** Treat the slot paytable as a point on the probability simplex. Increase volatility via **small, KL‑bounded steps** (mirror descent / natural gradient) **within RTP/Hit guardrails**. Every step is **audit‑ready** (Excel mirror + one‑pager + reproducible notebook).
+**Tagline.** Treat the slot paytable as a point on the probability simplex. Increase volatility via **small, KL-bounded steps** (mirror descent / natural gradient) **within RTP/Hit guardrails**. Every step is **audit-ready** (Excel mirror + one-pager + reproducible notebook + CLI outputs).
 
-> Note: This README uses plain text math for readability. The mathematical details live in `docs/info_geometry.md`.
+> Note: This README uses plain text math for readability. Mathematical details live in `docs/info_geometry.md`.
+
+---
 
 ## What this repo provides
 
-- **Auditable tuning framework:** a unified coordinate system for RTP, Hit‑rate, and Variance with explicit guardrails.
-- **Reproducibility:** an executable notebook, seeded Monte Carlo checks, and an Excel mirror for non‑engineers.
-- **Executive‑readiness:** a one‑pager summarizing assumptions, metrics, and results in plain English.
+- **Auditable tuning framework:** a unified coordinate system for RTP, Hit-rate, and Variance with explicit guardrails.
+- **Reproducibility:** an executable notebook, seeded Monte Carlo checks, Excel mirror, and reproducible CLI runs.
+- **Executive-readiness:** a one-pager (`docs/one_pager.md`) and Excel outputs for non-engineers.
+- **Engine module:** `igsimplex/` — a small Python package implementing KL-bounded updates, guardrail projection, and metrics.
+
+---
 
 ## How it works (at a glance)
 
 Paytable probabilities are treated as a vector `p = (p1, …, pn)` with all entries positive and `p1 + … + pn = 1` (the open probability simplex).  
-Updates take **small, KL‑bounded steps** and are **projected back** to the RTP/Hit bands when needed. KPIs (RTP / Hit‑rate / Variance) are computed analytically and cross‑checked by Monte Carlo simulation. This yields **safe, explainable, traceable** parameter changes.
+Updates take **small, KL-bounded steps** and are **projected back** to the RTP/Hit bands when needed. KPIs (RTP / Hit-rate / Variance) are computed analytically and cross-checked by Monte Carlo simulation. This yields **safe, explainable, traceable** parameter changes.
 
 See **`docs/info_geometry.md`** for a minimal atlas:
 
 - **Mixture coordinates:** `x = (p1, …, p_{n-1})`, with inverse `pn = 1 − sum(x_i)`.
 - **Exponential coordinates:** `theta_i = log(pi / pn)`; inverse (softmax)  
   `pi = exp(theta_i) / (1 + sum_j exp(theta_j))`, `pn = 1 / (1 + sum_j exp(theta_j))`.
-- **Fisher metric vs KL:** near interior points, the quadratic approximation of KL matches the Fisher metric, so KL‑bounded updates behave like short geodesic steps (natural‑gradient view).
+- **Fisher metric vs KL:** near interior points, the quadratic approximation of KL matches the Fisher metric, so KL-bounded updates behave like short geodesic steps (natural-gradient view).
+
+---
 
 ## Quick start
 
+### 1. Run the demo notebook
+
 ```bash
 pip install -r requirements.txt
-# Run the demo:
-# notebooks/ig_toy_slot_en.ipynb
+jupyter notebook notebooks/ig_toy_slot_en.ipynb
 ```
 
-Or browse pre‑generated artifacts:
+### 2. One-line CLI run
+
+```bash
+python -m igsimplex run -c configs/var_only.yaml
+```
+
+This creates a timestamped folder under `runs/`:
+
+```
+runs/run_20250927_113000/
+  ├── metrics_history.csv
+  ├── summary.json
+  └── paytable_audit.xlsx
+```
+
+- `summary.json` — analytic vs MC comparison, guardrails, trust-region.  
+- `metrics_history.csv` — per-iteration RTP/Hit/Var/KL/η.  
+- `paytable_audit.xlsx` — Excel mirror, easy to share with non-engineers.
+
+---
+
+## Artifacts (pre-generated)
 
 - **Unified Quick Note:** `docs/QUICK_NOTE.md`
 - **Excel mirror:** `excel/paytable_audit.xlsx`
-- **One‑pager:** `docs/one_pager.md`
+- **One-pager:** `docs/one_pager.md`
 - **Methodology (overview):** `docs/methodology.md`
 - **Information Geometry (atlas & charts):** `docs/info_geometry.md`
 - **Figures:** `figures/objective_convergence.png`, `figures/metrics_over_iterations.png`
 - **Sample data:** `data/spins_log_sample.csv`
 
+---
+
 ## Methodology & components
 
-- Conceptual framework (unified coordinates, guardrails, KL trust‑region): `docs/methodology.md`  
+- Conceptual framework (unified coordinates, guardrails, KL trust-region): `docs/methodology.md`  
 - Building blocks (`components/`):
   - `paytable.md` — payout/probability vectors; simplex domain; invariants  
-  - `metrics.md` — RTP / Hit‑rate / Variance definitions and differentials  
-  - `optimizer.md` — KL‑bounded mirror‑descent on the simplex; step control; stopping  
+  - `metrics.md` — RTP / Hit-rate / Variance definitions and differentials  
+  - `optimizer.md` — KL-bounded mirror-descent on the simplex; step control; stopping  
   - `constraints.md` — guardrails as linear bands; KL/Bregman projection  
   - `simulator.md` — Monte Carlo estimators and confidence intervals  
-  - `audit.md` — Excel mirror, one‑pager, and notebook reproducibility rules  
-  - `data_schema.md` — `spins_log` schema and data‑quality checks  
+  - `audit.md` — Excel mirror, one-pager, and notebook reproducibility rules  
+  - `data_schema.md` — `spins_log` schema and data-quality checks  
   - `config.md` — targets, tolerances, seeds, file paths (YAML suggestions)
+
+---
 
 ## KPI definitions (bet = 1)
 
 Let `p` be the probability vector and `r` the payout (multiplier) vector.
 
 - **RTP:** `RTP = sum_i p[i] * r[i]`
-- **Hit‑rate:** `Hit = sum of p[i] for which r[i] > 0`
+- **Hit-rate:** `Hit = sum of p[i] for which r[i] > 0`
 - **Variance (volatility proxy):** `Var = sum_i p[i] * r[i]^2  −  RTP^2`
+
+---
 
 ## Demo configuration (default)
 
-- Baseline (analytic): `RTP ≈ 0.9472`, `Hit‑rate ≈ 0.3200`, `Var ≈ 14.0436`  
-- Guardrails (bands): `RTP ≈ 0.9500 (±0.005)`, `Hit‑rate ≈ 0.3200 (±0.02)`  
+- Baseline (analytic): `RTP ≈ 0.9472`, `Hit-rate ≈ 0.3200`, `Var ≈ 14.0436`  
+- Guardrails (bands): `RTP ≈ 0.9500 (±0.005)`, `Hit-rate ≈ 0.3200 (±0.02)`  
 - Goal: **increase Variance** while remaining within both bands  
-- Validation: **Analytic vs Monte Carlo** (≥ `10^6` draws) agree within confidence intervals
+- Validation: **Analytic vs Monte Carlo** (`≥ 10^6` draws) agree within confidence intervals
 
-> Targets and tolerances are configurable; see `components/config.md`.
+> Targets and tolerances are configurable; see `configs/*.yaml` and `components/config.md`.
+
+---
 
 ## Folder layout
 
@@ -93,6 +130,17 @@ Let `p` be the probability vector and `r` the payout (multiplier) vector.
 │   ├── audit.pdf
 │   ├── data_schema.pdf
 │   └── config.md
+├── igsimplex
+│   ├── core.py
+│   ├── opt.py
+│   ├── cli.py
+│   └── __main__.py
+├── configs
+│   └── var_only.yaml
+├── tests
+│   ├── test_metrics.py
+│   ├── test_projection.py
+│   └── test_kl_step.py
 ├── notebooks
 │   └── ig_toy_slot_en.ipynb
 ├── excel
@@ -100,11 +148,21 @@ Let `p` be the probability vector and `r` the payout (multiplier) vector.
 ├── figures
 │   ├── objective_convergence.png
 │   └── metrics_over_iterations.png
-└── data
-    └── spins_log_sample.csv
+├── runs/               # auto-generated experiment outputs
+└── compliance
+    └── change_log.md   # template for audit & rollback
 ```
+
+---
 
 ## Scope & notes
 
-This is a **toy demo / PoC** showing: unified coordinates + guardrails + audit‑first delivery.  
-A production setup would plug in real jurisdiction limits, internal spreadsheet templates, data pipelines, and staged rollout (shadow → canary → full).
+This is a **toy demo / PoC** showing:  
+
+- unified coordinates + guardrails + audit-first delivery, and  
+- an engine (`igsimplex/`) with CLI, tests, and compliance hooks.  
+
+A production setup would plug in real jurisdiction limits, internal spreadsheet templates, data pipelines, and staged rollout (shadow → canary → full).  
+Outputs under `runs/` plus `compliance/change_log.md` are designed as **audit / rollback artifacts**.
+
+---
