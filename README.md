@@ -4,6 +4,49 @@
 
 > Note: This README uses plain text math for readability. Mathematical details live in `docs/info_geometry.md`.
 
+**Python:** 3.9–3.12
+
+---
+
+## Quickstart 
+
+```bash
+# 0) clone
+git clone <repo-url> && cd igaming-math-demo
+
+# 1) virtualenv
+python3 -m venv .venv
+# macOS/Linux
+source .venv/bin/activate
+# Windows (PowerShell)
+# .venv\Scripts\Activate.ps1
+
+# 2) install (package + test deps)
+pip install -U pip
+pip install -e '.[dev]'      # 注意 zsh 需要引號；PowerShell 用 ".[dev]"
+
+# 3) run tests — expect "3 passed"
+pytest -q
+
+# 4) run a reproducible demo
+python -m igsimplex --config configs/var_only.yaml --seed 42
+```
+
+**Artifacts** are saved under `runs/<timestamp>/`:
+
+- `summary.json` — analytic vs MC, guardrails, KL trust-region  
+- `metrics_history.csv` — RTP/Hit/Var/KL per iteration  
+- `paytable_audit.xlsx` — Excel mirror for non-engineers
+
+> Alt: if you prefer notebooks  
+> `pip install -r requirements.txt && jupyter notebook notebooks/ig_toy_slot_en.ipynb`
+
+### Troubleshooting
+
+- **`zsh: no matches found: .[dev]`** → 用 `pip install -e '.[dev]'`（加引號）。  
+- **`ModuleNotFoundError: igsimplex`** → 確認你已啟用 venv 並成功執行 `pip install -e '.[dev]'`。  
+- **Windows** 不需要 `make`：本專案已採用標準 Python 安裝流程。
+
 ---
 
 ## What this repo provides
@@ -29,44 +72,14 @@ See **`docs/info_geometry.md`** for a minimal atlas:
 
 ---
 
-## Quick start
-
-### 1. Run the demo notebook
-
-```bash
-pip install -r requirements.txt
-jupyter notebook notebooks/ig_toy_slot_en.ipynb
-```
-
-### 2. One-line CLI run
-
-```bash
-python -m igsimplex run -c configs/var_only.yaml
-```
-
-This creates a timestamped folder under `runs/`:
-
-```
-runs/run_20250927_113000/
-  ├── metrics_history.csv
-  ├── summary.json
-  └── paytable_audit.xlsx
-```
-
-- `summary.json` — analytic vs MC comparison, guardrails, trust-region.  
-- `metrics_history.csv` — per-iteration RTP/Hit/Var/KL/η.  
-- `paytable_audit.xlsx` — Excel mirror, easy to share with non-engineers.
-
----
-
 ## Artifacts (pre-generated)
 
-- **Unified Quick Note:** `docs/QUICK_NOTE.md`
-- **Excel mirror:** `excel/paytable_audit.xlsx`
-- **One-pager:** `docs/one_pager.md`
-- **Methodology (overview):** `docs/methodology.md`
-- **Information Geometry (atlas & charts):** `docs/info_geometry.md`
-- **Figures:** `figures/objective_convergence.png`, `figures/metrics_over_iterations.png`
+- **Unified Quick Note:** `docs/QUICK_NOTE.md`  
+- **Excel mirror:** `excel/paytable_audit.xlsx`  
+- **One-pager:** `docs/one_pager.md`  
+- **Methodology (overview):** `docs/methodology.md`  
+- **Information Geometry (atlas & charts):** `docs/info_geometry.md`  
+- **Figures:** `figures/objective_convergence.png`, `figures/metrics_over_iterations.png`  
 - **Sample data:** `data/spins_log_sample.csv`
 
 ---
@@ -75,13 +88,13 @@ runs/run_20250927_113000/
 
 - Conceptual framework (unified coordinates, guardrails, KL trust-region): `docs/methodology.md`  
 - Building blocks (`components/`):
-  - `paytable.md` — payout/probability vectors; simplex domain; invariants  
-  - `metrics.md` — RTP / Hit-rate / Variance definitions and differentials  
-  - `optimizer.md` — KL-bounded mirror-descent on the simplex; step control; stopping  
-  - `constraints.md` — guardrails as linear bands; KL/Bregman projection  
-  - `simulator.md` — Monte Carlo estimators and confidence intervals  
-  - `audit.md` — Excel mirror, one-pager, and notebook reproducibility rules  
-  - `data_schema.md` — `spins_log` schema and data-quality checks  
+  - `paytable.pdf` — payout/probability vectors; simplex domain; invariants  
+  - `metrics.pdf` — RTP / Hit-rate / Variance definitions and differentials  
+  - `optimizer.pdf` — KL-bounded mirror-descent on the simplex; step control; stopping  
+  - `constraints.pdf` — guardrails as linear bands; KL/Bregman projection  
+  - `simulator.pdf` — Monte Carlo estimators and confidence intervals  
+  - `audit.pdf` — Excel mirror, one-pager, and notebook reproducibility rules  
+  - `data_schema.pdf` — `spins_log` schema and data-quality checks  
   - `config.md` — targets, tolerances, seeds, file paths (YAML suggestions)
 
 ---
@@ -90,8 +103,8 @@ runs/run_20250927_113000/
 
 Let `p` be the probability vector and `r` the payout (multiplier) vector.
 
-- **RTP:** `RTP = sum_i p[i] * r[i]`
-- **Hit-rate:** `Hit = sum of p[i] for which r[i] > 0`
+- **RTP:** `RTP = sum_i p[i] * r[i]`  
+- **Hit-rate:** `Hit = sum of p[i] for which r[i] > 0`  
 - **Variance (volatility proxy):** `Var = sum_i p[i] * r[i]^2  −  RTP^2`
 
 ---
@@ -112,6 +125,7 @@ Let `p` be the probability vector and `r` the payout (multiplier) vector.
 ```
 .
 ├── README.md
+├── pyproject.toml
 ├── requirements.txt
 ├── .gitignore
 ├── docs
@@ -164,5 +178,3 @@ This is a **toy demo / PoC** showing:
 
 A production setup would plug in real jurisdiction limits, internal spreadsheet templates, data pipelines, and staged rollout (shadow → canary → full).  
 Outputs under `runs/` plus `compliance/change_log.md` are designed as **audit / rollback artifacts**.
-
----
