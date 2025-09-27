@@ -1,16 +1,23 @@
-# toy-slot-on-the-simplex — KL-bounded tuning under RTP/Hit guardrails
+# toy-slot-on-the-simplex: KL-bounded tuning under RTP/Hit guardrails
 
-**Tagline.** Treat the slot paytable as a point on the probability simplex. Move in **small, KL-bounded steps** (mirror-descent / natural-gradient flavor) **inside RTP/Hit guardrails** to increase volatility. Every step is **audit-ready** (Excel mirror + one-pager + reproducible notebook).
+**Tagline.** Treat the slot paytable as a point on the probability simplex. Increase volatility via **small, KL-bounded steps** (mirror descent / natural gradient) **within RTP/Hit guardrails**. Every step is **audit-ready** (Excel mirror + one-pager + reproducible notebook).
 
 ## What this repo provides
 
-- **Auditable tuning framework**: A unified coordinate system for RTP, Hit-rate, and volatility with explicit guardrails.
-- **Reproducibility**: An executable notebook, seeded Monte Carlo checks, and an Excel mirror for non-engineers.
-- **Executive-readiness**: A one-pager that summarizes assumptions, metrics, and results in plain English.
+- **Auditable tuning framework:** a unified coordinate system for RTP, Hit-rate, and Variance with explicit guardrails.
+- **Reproducibility:** an executable notebook, seeded Monte Carlo checks, and an Excel mirror for non-engineers.
+- **Executive-readiness:** a one-pager summarizing assumptions, metrics, and results in plain English.
 
 ## How it works (at a glance)
 
-We model the paytable probabilities \(p\) on the **probability simplex** and navigate with **small, KL-bounded updates**, projecting back to **RTP/Hit bands** when necessary. KPIs (RTP / Hit-rate / Variance) are analytic and cross-checked by Monte Carlo simulation. This yields **safe, explainable, and traceable** parameter changes.
+Paytable probabilities \(p\) are modeled on the **open probability simplex** \(\Delta^{n-1}_{+}=\{\,p\in\mathbb{R}^n \mid p_i>0,\ \sum_i p_i=1\,\}\).
+Updates take **small, KL-bounded steps** and are **projected back** to the RTP/Hit bands when needed. KPIs (RTP / Hit-rate / Variance) are analytic and cross-checked by Monte Carlo simulation. This yields **safe, explainable, traceable** parameter changes.
+
+See **`docs/info_geometry.md`** for a minimal atlas:
+
+- **Mixture coordinates** \(x=(p_1,\dots,p_{n-1})\) with inverse \(p_n=1-\sum_{i=1}^{n-1}x_i\).
+- **Exponential coordinates** \(\theta_i=\log(p_i/p_n)\) with inverse softmax \(p_i=\frac{e^{\theta_i}}{1+\sum_{j=1}^{n-1}e^{\theta_j}},\ p_n=\frac{1}{1+\sum_{j=1}^{n-1}e^{\theta_j}}\).
+- **Fisher information metric:** the quadratic approximation of KL at interior points equals the Fisher metric, so KL-bounded updates correspond to short geodesic steps (natural-gradient view).
 
 ## Quick start
 
@@ -22,11 +29,13 @@ pip install -r requirements.txt
 
 Or browse pre-generated artifacts:
 
-- **Excel mirror**: `excel/paytable_audit.xlsx`
-- **One-pager**: `docs/one_pager.md`
-- **Methodology (conceptual overview)**: `docs/methodology.md`
-- **Figures**: `figures/objective_convergence.png`, `figures/metrics_over_iterations.png`
-- **Sample data**: `data/spins_log_sample.csv`
+- **Unified Quick Note:** `docs/QUICK_NOTE.md`
+- **Excel mirror:** `excel/paytable_audit.xlsx`
+- **One-pager:** `docs/one_pager.md`
+- **Methodology (overview):** `docs/methodology.md`
+- **Information Geometry (atlas & charts):** `docs/info_geometry.md`
+- **Figures:** `figures/objective_convergence.png`, `figures/metrics_over_iterations.png`
+- **Sample data:** `data/spins_log_sample.csv`
 
 ## Methodology & components
 
@@ -43,19 +52,20 @@ Or browse pre-generated artifacts:
 
 ## KPI definitions (bet = 1)
 
-- **RTP**: \( \text{RTP}(p) = \sum_i p_i\, r_i \)  
-- **Hit-rate**: \( \text{Hit}(p) = \sum_{r_i>0} p_i \)  
-- **Variance (volatility proxy)**: \( \text{Var}(p) = \sum_i p_i\, r_i^2 - \text{RTP}(p)^2 \)  
-  Where `r` is the **payout vector** (multipliers) and `p` the corresponding probability vector.
+Let \(p\in\Delta^{n-1}_{+}\) and payout vector \(r\ge 0\).
+
+- **RTP:** \(\mathrm{RTP}(p)=\sum_i p_i r_i\)  
+- **Hit-rate:** \(\mathrm{Hit}(p)=\sum_{r_i>0} p_i\)  
+- **Variance (volatility proxy):** \(\mathrm{Var}(p)=\sum_i p_i r_i^2-\mathrm{RTP}(p)^2\)
 
 ## Demo configuration (default)
 
-- Baseline metrics (analytic): RTP ≈ 0.9472, Hit ≈ 0.3200, Var ≈ 14.0436  
-- Guardrails (bands): RTP ≈ 0.9500 (±0.005), Hit ≈ 0.3200 (±0.02)  
-- Goal: **increase variance** while staying inside the bands  
-- Validation: **Analytic vs Monte Carlo** (1e6 draws) agree within confidence intervals  
+- Baseline (analytic): RTP ≈ 0.9472, Hit-rate ≈ 0.3200, Var ≈ 14.0436  
+- Guardrails (bands): RTP ≈ 0.9500 (±0.005), Hit-rate ≈ 0.3200 (±0.02)  
+- Goal: **increase Variance** while remaining within both bands  
+- Validation: **Analytic vs Monte Carlo** (≥ \(10^6\) draws) agree within confidence intervals
 
-> Targets and tolerances can be adapted; see `components/config.md`.
+> Targets and tolerances are configurable; see `components/config.md`.
 
 ## Folder layout
 
@@ -66,7 +76,11 @@ Or browse pre-generated artifacts:
 ├── .gitignore
 ├── docs
 │   ├── one_pager.md
-│   └── methodology.md
+│   ├── methodology.md
+│   ├── QUICK_NOTE.md
+│   ├── info_geometry.md
+│   └── figures
+│       └── atlas_coords.png
 ├── components
 │   ├── paytable.pdf
 │   ├── metrics.pdf
